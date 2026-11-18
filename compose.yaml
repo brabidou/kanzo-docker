@@ -1,0 +1,17 @@
+# docker compose up -d   then open http://localhost:4242
+services:
+  kanzo:
+    image: ghcr.io/brabidou/kanzo:latest
+    # Or build it here instead of pulling: `docker compose up -d --build`
+    build: .
+    container_name: kanzo
+    restart: unless-stopped
+    ports:
+      # Keep both sides the same: Kanzo rejects requests whose Host port differs from
+      # the port it listens on. To change it, change both numbers and `port` in config.toml.
+      - "4242:4242"
+    volumes:
+      - kanzo-data:/data
+
+volumes:
+  kanzo-data:
