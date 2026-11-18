@@ -6,7 +6,8 @@
 
 - **Image:** `ghcr.io/brabidou/kanzo`
 - **Platforms:** `linux/amd64`, `linux/arm64`, `linux/arm/v7`, `linux/arm/v6` (that covers every Raspberry Pi)
-- **Contents:** the official, checksum-verified release binary on Alpine, plus `git` for `kanzo sync`. It runs as a non-root user (uid 1000).
+- **Contents:** the official, checksum-verified release binary on Alpine, plus `git` for `kanzo sync`. The board runs as a non-root user, `PUID:PGID`, which defaults to 1000:1000.
+- **Guides:** [Unraid](#unraid) · [Pangolin](#behind-pangolin) · [other reverse proxies](#behind-another-reverse-proxy)
 
 ## Quick start
 
@@ -46,13 +47,14 @@ Over HTTP, Kanzo can't see which repo the agent is working in, so agents have to
 
 Everything is stored in `/data`: the board in `kanzo.db`, pasted images, and `config.toml`. Keep that directory on a volume, or you lose the board when the container is removed.
 
-**Bind mount instead of a named volume:** the directory has to be writable by uid 1000. You can also run the container as yourself:
+**Ownership:** the container starts as root only long enough to give `/data` to `PUID:PGID`, then runs Kanzo as that user. To own the files on a bind mount yourself:
 
 ```sh
-mkdir -p ./kanzo-data
 docker run -d --name kanzo -p 4242:4242 -v "$PWD/kanzo-data:/data" \
-  --user "$(id -u):$(id -g)" ghcr.io/brabidou/kanzo:latest
+  -e PUID="$(id -u)" -e PGID="$(id -g)" ghcr.io/brabidou/kanzo:latest
 ```
+
+If you'd rather it never runs as root, start it with `--user <uid>:<gid>` instead. That skips the ownership step, so the user has to own `/data` already.
 
 **Backup:** export the board while it runs, or stop the container and copy the volume:
 
@@ -83,7 +85,53 @@ docker run -d --name kanzo -p 4300:4300 -v kanzo-data:/data \
 
 Instead of `--port`, you can set `port = 4300` in `config.toml`.
 
-### Behind a reverse proxy
+### Unraid
+
+**With the template.** In Unraid's terminal, download the template:
+
+```sh
+wget -O /boot/config/plugins/dockerMan/templates-user/my-kanzo.xml \
+  https://raw.githubusercontent.com/brabidou/kanzo-docker/main/unraid/kanzo.xml
+```
+
+Then go to **Docker → Add Container**, pick **kanzo** under *Template*, and click **Apply**.
+
+**By hand.** Go to **Docker → Add Container** and fill in:
+
+| Field | Value |
+| --- | --- |
+| Repository | `ghcr.io/brabidou/kanzo:latest` |
+| Network type | `bridge` |
+| Port | container `4242` → host `4242` |
+| Path | container `/data` → host `/mnt/user/appdata/kanzo` |
+| Variable `PUID` | `99` (Unraid's `nobody`) |
+| Variable `PGID` | `100` (Unraid's `users`) |
+
+Open the board at `http://<unraid-ip>:4242`. Keep the host port at 4242 to reach it by IP (see the note under [Quick start](#quick-start)). **Check for Updates** on the Docker tab pulls new releases.
+
+### Behind Pangolin
+
+[Pangolin](https://github.com/fosrl/pangolin) gives the board a domain, HTTPS and a login. Kanzo has no login of its own, so Pangolin's authentication is the only thing protecting the board. Keep it on.
+
+Kanzo turns away requests for an unknown `Host`, and any `Origin` that starts with `https://`. Pangolin sends both of those by default, so the resource has to rewrite them:
+
+1. **Resources → Add Resource.** Choose an HTTP resource on your domain, like `kanzo.example.com`. For the site, pick the one whose Newt can reach Unraid.
+2. **Target.** Method `http`, the Unraid server's LAN IP (or the container name `kanzo`, if Newt runs on the same Docker network), port `4242`.
+3. **Proxy settings → Custom Host Header:** `localhost:4242`
+4. **Proxy settings → Custom Headers:**
+   ```
+   Origin: http://localhost:4242
+   ```
+   Then click **Save Proxy Settings**.
+5. **Authentication:** leave SSO or another method on.
+
+If you skip steps 3 and 4, the board loads but can't load tasks or save anything, and the requests come back `403 kanzo does not answer requests from other sites`.
+
+The fixed `Origin` replaces Kanzo's own check against cross-site requests for traffic through Pangolin, so Pangolin's login does that job. Never add a rule that lets requests bypass authentication. Not even for `/mcp`: that would publish a board anyone could change.
+
+**Agents** can't sign in to Pangolin. Connect them from your LAN, or over a VPN, straight to `http://<unraid-ip>:4242/mcp`.
+
+### Behind another reverse proxy
 
 Kanzo accepts a `Host` only if it is `localhost`, an IP address, or the machine's own hostname. It also requires a request's `Origin` to be `http://<that host>`. A proxy serving a domain over HTTPS therefore has to rewrite both. With nginx:
 
@@ -172,8 +220,9 @@ docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6
 | File | What it is |
 | --- | --- |
 | [`Dockerfile`](Dockerfile) | Downloads and verifies the release binary, then builds the Alpine runtime image |
-| [`docker-entrypoint.sh`](docker-entrypoint.sh) | Sets `listen = "0.0.0.0"` on first start, then runs `kanzo` |
+| [`docker-entrypoint.sh`](docker-entrypoint.sh) | Gives `/data` to `PUID:PGID` and drops root, sets `listen = "0.0.0.0"` on first start, then runs `kanzo` |
 | [`compose.yaml`](compose.yaml) | Compose setup with a named volume |
+| [`unraid/kanzo.xml`](unraid/kanzo.xml) | Unraid Docker template |
 | [`.github/workflows/docker.yml`](.github/workflows/docker.yml) | Release watcher, test and multi-arch publish |
 
 ## License
