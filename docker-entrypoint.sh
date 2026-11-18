@@ -26,8 +26,9 @@ config="${KANZO_HOME:-/data}/config.toml"
 [ -f "$config" ] || kanzo init >/dev/null
 sed -i -e 's/^port = .*/port = 4241/' -e 's/^listen = .*/listen = "127.0.0.1"/' "$config"
 
-# shortcut: if Caddy dies, Kanzo keeps running and the healthcheck turns unhealthy, but the
-# container doesn't restart; add a process supervisor if that ever happens in practice.
+# 4. Caddy in the background, Kanzo as the main process: if Kanzo exits, the container
+#    exits. The healthcheck goes through Caddy to Kanzo, so if Caddy dies the container
+#    turns unhealthy.
 caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
 
 echo "kanzo-docker: the board is served on port 4242 (Kanzo's own 4241 is internal)."
