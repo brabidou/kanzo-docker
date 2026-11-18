@@ -15,7 +15,7 @@
   <Icon>https://raw.githubusercontent.com/emanuele-em/kanzo/main/src/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
-  <Config Name="Web UI port" Target="4242" Default="4242" Mode="tcp" Description="Keep it 4242 to open the board by IP: Kanzo rejects requests whose Host port differs from its own. Behind Pangolin, any port works." Type="Port" Display="always" Required="true" Mask="false">4242</Config>
+  <Config Name="Web UI port" Target="4242" Default="4242" Mode="tcp" Description="The port the board is served on." Type="Port" Display="always" Required="true" Mask="false">4242</Config>
   <Config Name="Data" Target="/data" Default="/mnt/user/appdata/kanzo" Mode="rw" Description="The board (kanzo.db), images and config.toml." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/kanzo</Config>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User the board runs as; 99 is Unraid's nobody." Type="Variable" Display="advanced" Required="true" Mask="false">99</Config>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group the board runs as; 100 is Unraid's users." Type="Variable" Display="advanced" Required="true" Mask="false">100</Config>

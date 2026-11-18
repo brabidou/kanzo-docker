@@ -1,5 +1,6 @@
 #!/bin/sh
-# Runs `kanzo` with the container's arguments, after two first-run steps.
+# Starts Kanzo behind Caddy. Kanzo listens on 127.0.0.1:4241 inside the container and
+# Caddy publishes it on port 4242 (see /etc/caddy/Caddyfile for why).
 set -eu
 
 # 1. As root (the default), make /data belong to PUID:PGID and drop to that user.
@@ -12,13 +13,22 @@ if [ "$(id -u)" = 0 ]; then
   exec su-exec "$PUID:$PGID" "$0" "$@"
 fi
 
-# 2. Kanzo's default config.toml says listen = "127.0.0.1", which inside a container means
-#    nobody outside it can reach the board. On the very first run only, create the config
-#    and switch it to 0.0.0.0. Later edits to /data/config.toml are left alone.
-config="${KANZO_HOME:-/data}/config.toml"
-if [ ! -f "$config" ]; then
-  kanzo init >/dev/null
-  sed -i 's/^listen = "127.0.0.1"/listen = "0.0.0.0"/' "$config"
+# 2. Only the default command starts the board. Anything else, like
+#    `docker run ... kanzo export` or `--version`, runs on its own.
+if [ "$*" != "--no-open" ]; then
+  exec kanzo "$@"
 fi
 
-exec kanzo "$@"
+# 3. Kanzo's address belongs to the image: Caddy expects it at 127.0.0.1:4241. Set it on
+#    every start, which also moves boards created by earlier images (0.0.0.0:4242) over.
+#    Every other setting in config.toml stays as you left it.
+config="${KANZO_HOME:-/data}/config.toml"
+[ -f "$config" ] || kanzo init >/dev/null
+sed -i -e 's/^port = .*/port = 4241/' -e 's/^listen = .*/listen = "127.0.0.1"/' "$config"
+
+# shortcut: if Caddy dies, Kanzo keeps running and the healthcheck turns unhealthy, but the
+# container doesn't restart; add a process supervisor if that ever happens in practice.
+caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
+
+echo "kanzo-docker: the board is served on port 4242 (Kanzo's own 4241 is internal)."
+exec kanzo --no-open

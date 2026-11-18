@@ -1,0 +1,31 @@
+# Caddy sits in front of Kanzo inside the container, so it works behind any reverse
+# proxy (Pangolin, Traefik, nginx, ...), on any domain and on any published port.
+#
+# Kanzo itself only accepts Host "localhost:<its port>" (or an IP / its own hostname) and
+# an Origin of "http://<that host>". It does this to block DNS rebinding and cross-site
+# requests. Caddy keeps that protection while making Kanzo reachable by any name:
+#   - Host is always rewritten to Kanzo's internal address.
+#   - Origin is rewritten only when it is the same site the request was sent to (http or
+#     https, by Host or X-Forwarded-Host). Any other Origin passes through unchanged, and
+#     Kanzo rejects it as before.
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:4242 {
+	@same_origin expression `{http.request.header.Origin} in [
+		"http://" + {http.request.hostport},
+		"https://" + {http.request.hostport},
+		"http://" + {http.request.header.X-Forwarded-Host},
+		"https://" + {http.request.header.X-Forwarded-Host}
+	]`
+	request_header @same_origin Origin http://localhost:4241
+
+	reverse_proxy 127.0.0.1:4241 {
+		header_up Host localhost:4241
+		# The board and MCP stream updates; send them on immediately.
+		flush_interval -1
+	}
+}

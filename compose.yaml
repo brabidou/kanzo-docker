@@ -7,8 +7,7 @@ services:
     container_name: kanzo
     restart: unless-stopped
     ports:
-      # Keep both sides the same: Kanzo rejects requests whose Host port differs from
-      # the port it listens on. To change it, change both numbers and `port` in config.toml.
+      # host:container. Change only the left side to use another port.
       - "4242:4242"
     volumes:
       - kanzo-data:/data

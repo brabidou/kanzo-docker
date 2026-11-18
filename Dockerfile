@@ -48,18 +48,22 @@ LABEL org.opencontainers.image.title="kanzo" \
 # git: `kanzo sync` and the project lookup shell out to it.
 # ca-certificates: so git can reach https remotes.
 # su-exec: the entrypoint drops from root to PUID:PGID with it.
+# caddy: fronts Kanzo so it answers on any domain and port (see Caddyfile).
 # No curl on purpose: without it Kanzo's self-updater stays quiet, because a container is
 # updated by pulling a new image, not by replacing the binary inside it.
-RUN apk add --no-cache git ca-certificates su-exec \
+RUN apk add --no-cache git ca-certificates su-exec caddy \
  && adduser -D -u 1000 -h /data kanzo
 
 COPY --from=fetch /tmp/kanzo/kanzo /usr/local/bin/kanzo
 COPY --from=fetch /tmp/kanzo/LICENSE /usr/share/licenses/kanzo/LICENSE
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY Caddyfile /etc/caddy/Caddyfile
 
 # The whole board lives here: kanzo.db, images and config.toml.
 # HOME too, so git finds a writable home whatever uid the board runs as.
-ENV KANZO_HOME=/data HOME=/data PUID=1000 PGID=1000
+# Caddy keeps its own files in /tmp, out of the board's folder and out of `kanzo sync`.
+ENV KANZO_HOME=/data HOME=/data PUID=1000 PGID=1000 \
+    XDG_DATA_HOME=/tmp/caddy XDG_CONFIG_HOME=/tmp/caddy
 VOLUME /data
 WORKDIR /data
 # Starts as root only to fix /data's owner, then runs Kanzo as PUID:PGID (see the entrypoint).
